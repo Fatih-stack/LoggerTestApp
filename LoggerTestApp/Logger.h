@@ -40,14 +40,6 @@ namespace aricanli {
 			}
 
 			template <typename T>
-			void log_argument(T value) {
-				if (typeid(value) == typeid(wchar_t const* __ptr64))
-					std::wcout << value << " ";
-				else
-					std::cout << value << " ";
-			}
-
-			template <typename T>
 			void log_writefile(const T& value) {
 				file.close();
 				file.open(file_path, std::fstream::in | std::fstream::out | std::fstream::app);
