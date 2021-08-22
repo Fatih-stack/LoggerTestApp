@@ -108,7 +108,7 @@ void CLoggerTestAppDlg::OnBnClickedButton1()
 		return;
 	}
 	std::string res(sFilePath.begin(), sFilePath.end());
-	aricanli::general::Logger::get_instance().enable_file_output(res);
+	aricanli::general::Logger::instance().enable_file_output(res);
 
 	std::thread threads[3];
 	for (int i = 0; i < 3; i++)
@@ -116,7 +116,7 @@ void CLoggerTestAppDlg::OnBnClickedButton1()
 
 	for (int i = 0; i < 3; i++)
 		threads[i].join();
-	aricanli::general::Logger::get_instance().close_file();
+	aricanli::general::Logger::instance().close_file();
 
 	CStdioFile fp;
 	CString m_Buffer;

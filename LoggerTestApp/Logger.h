@@ -71,14 +71,22 @@ namespace aricanli {
 			//severity has default value but developer can set desired severity value manually
 			static void SetPriority(Severity new_severity)
 			{
-				get_instance().severity = new_severity;
+				instance().severity = new_severity;
 			}
 
+			/***********************************************************************************************
+			* Def : Template function developer can write any severity type log in one function by changing
+			* not constant parameter Severity type and severity msg
+			* Args : line => lineNumber, source_file => source File path, msg_priorty_str => Severity as string
+			* msg_severity => severity level to check whether severity bigger or not, 
+			* message => first user message, args => any type args (wchar,char, int ...)
+			* Output : Log text file which includes all logs in chosen path from GUI
+			***********************************************************************************************/
 			template<typename T, typename... Args>
 			static void Any(int line, const std::string source_file, const std::string& msg_priorty_str,
 				Severity msg_severity, const T message, Args... args)
 			{
-				get_instance().log(line, source_file, msg_priorty_str, msg_severity, message, args...);
+				instance().log(line, source_file, msg_priorty_str, msg_severity, message, args...);
 			}
 
 		public:
@@ -93,7 +101,7 @@ namespace aricanli {
 					file.close();
 			}
 
-			static Logger& get_instance()
+			static Logger& instance()
 			{
 				static Logger logger;
 				return logger;
