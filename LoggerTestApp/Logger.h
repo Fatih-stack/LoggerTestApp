@@ -30,7 +30,7 @@ namespace aricanli {
 
 		protected:
 			// Second version:
-			template< typename ... Args >
+			template<typename ... Args >
 			std::wstring stringer(const Args& ... args)
 			{
 				std::wostringstream oss;
@@ -40,17 +40,15 @@ namespace aricanli {
 			}
 
 			template <typename T>
-			void log_argument(T t) {
-				std::cout << t << " ";
+			void log_argument(T value) {
+				if (typeid(value) == typeid(wchar_t const* __ptr64))
+					std::wcout << value << " ";
+				else
+					std::cout << value << " ";
 			}
+
 			template <typename T>
-			void wlog_argument(T value) {
-				std::wcout << value << " ";
-			}
-			template <typename T>
-			void wlog_writefile(const T& value) {
-				auto& x = typeid(value);
-				//		std::cout << x.name();
+			void log_writefile(const T& value) {
 				file.close();
 				file.open(file_path, std::fstream::in | std::fstream::out | std::fstream::app);
 				if (typeid(value) == typeid(wchar_t const* __ptr64)) {
@@ -61,12 +59,6 @@ namespace aricanli {
 					return;
 				}
 				file << value << " ";
-			}
-			template <typename T>
-			void log_writefile(const T& t) {
-				file.close();
-				file.open(file_path, std::fstream::in | std::fstream::out | std::fstream::app);
-				file << t << " ";
 			}
 
 		public:
@@ -180,10 +172,7 @@ namespace aricanli {
 			}
 
 		public:
-			Logger()
-			{
-				
-			}
+			Logger() {}
 
 			Logger(const Logger&) = delete;
 			Logger& operator= (const Logger&) = delete;
@@ -212,9 +201,7 @@ namespace aricanli {
 					strftime(buffer, 80, "%c", timestamp);
 					std::string s(buffer);
 					typename std::lock_guard lock(log_mutex);
-					std::cout << s << '\t' << msg_priorty_str << " " << msg;
 					int dummy[] = { 0, ((void)log_argument(std::forward<Args>(args)),0)... };
-
 					if (file.is_open())
 					{
 						file.close();
@@ -244,7 +231,7 @@ namespace aricanli {
 					std::string strMsgPrty(msg_priorty_str.begin(), msg_priorty_str.end());
 					std::string strMsg(msg.begin(), msg.end());
 					std::cout << strS << '\t' << strMsgPrty << " " << strMsg;
-					int dummy[] = { 0, ((void)wlog_argument(std::forward<Args>(args)),0)... };
+					int dummy[] = { 0, ((void)log_argument(std::forward<Args>(args)),0)... };
 					std::string strSource(source.begin(), source.end());
 
 					if (file.is_open())
@@ -252,7 +239,7 @@ namespace aricanli {
 						file.close();
 						file.open(file_path, std::fstream::in | std::fstream::out | std::fstream::app);
 						file << strS.c_str() << '\t' << strMsgPrty.c_str() << " " << strMsg.c_str() << " ";
-						int dummy[] = { 0, ((void)wlog_writefile(std::forward<Args>(args)),0)... };
+						int dummy[] = { 0, ((void)log_writefile(std::forward<Args>(args)),0)... };
 						file << " on line " << line << " in " << strSource.c_str() << "\n";
 					}
 					else {
