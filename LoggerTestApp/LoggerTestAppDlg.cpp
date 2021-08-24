@@ -13,6 +13,40 @@
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
+#include <iomanip>
+
+class Timer
+{
+public:
+	//initialize class with a test name and by starting timer
+	Timer() : m_Stop(false)
+	{
+		m_BeginTime = std::chrono::high_resolution_clock::now();
+	}
+
+	//destructor if timer not stopped stop timer
+	~Timer() { if (!m_Stop) Stop(); }
+
+	//calculate beginning and finishing times of timer and also get thread id
+	//by using these calculations adds new profile to json file and stop timer
+	void Stop()
+	{
+		auto endTime = std::chrono::high_resolution_clock::now();
+		begin = std::chrono::time_point_cast<std::chrono::microseconds>(m_BeginTime).time_since_epoch().count();
+		end = std::chrono::time_point_cast<std::chrono::microseconds>(endTime).time_since_epoch().count();
+
+		threadID = std::hash<std::thread::id>{}(std::this_thread::get_id());
+		m_Stop = true;
+	}
+public:
+	long long begin;
+	long long end;
+	uint32_t threadID;
+
+private:
+	std::chrono::time_point<std::chrono::steady_clock> m_BeginTime;
+	bool m_Stop;
+};
 
 // CLoggerTestAppDlg dialog
 
@@ -91,8 +125,6 @@ HCURSOR CLoggerTestAppDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
-
-
 void CLoggerTestAppDlg::OnBnClickedButton1()
 {
 	// TODO: Add your control notification handler code here
@@ -109,7 +141,7 @@ void CLoggerTestAppDlg::OnBnClickedButton1()
 	}
 	std::string res(sFilePath.begin(), sFilePath.end());
 	aricanli::general::Logger::instance().enable_file_output(res);
-
+	Timer timer;
 	std::thread threads[3];
 	for (int i = 0; i < 3; i++)
 		threads[i] = std::thread(aricanli::general::log_test, i);
@@ -117,7 +149,7 @@ void CLoggerTestAppDlg::OnBnClickedButton1()
 	for (int i = 0; i < 3; i++)
 		threads[i].join();
 	aricanli::general::Logger::instance().close_file();
-
+	timer.Stop();
 	CStdioFile fp;
 	CString m_Buffer;
 	CString m_TempBuffer;
@@ -132,5 +164,12 @@ void CLoggerTestAppDlg::OnBnClickedButton1()
 	}
 
 	fp.Close();
+	
+	long long duration = timer.end - timer.begin;
+	double ms = duration * 0.001;
+	std::ostringstream ost;
+	ost << std::setprecision(8) << ms;
+	m_Buffer += ost.str().c_str();
+	m_Buffer += " ms \r\n";
 	m_EditList.SetWindowText(m_Buffer);
 }
