@@ -18,6 +18,7 @@
 class Timer
 {
 public:
+	static double result;
 	//initialize class with a test name and by starting timer
 	Timer() : m_Stop(false)
 	{
@@ -37,6 +38,8 @@ public:
 
 		threadID = std::hash<std::thread::id>{}(std::this_thread::get_id());
 		m_Stop = true;
+		long long duration = end - begin;
+		Timer::result = duration * 0.001;
 	}
 public:
 	long long begin;
@@ -125,6 +128,8 @@ HCURSOR CLoggerTestAppDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
+double Timer::result = 0;
+
 void CLoggerTestAppDlg::OnBnClickedButton1()
 {
 	// TODO: Add your control notification handler code here
@@ -140,16 +145,17 @@ void CLoggerTestAppDlg::OnBnClickedButton1()
 		return;
 	}
 	std::string res(sFilePath.begin(), sFilePath.end());
-	aricanli::general::Logger::instance().enable_file_output(res);
-	Timer timer;
-	std::thread threads[3];
-	for (int i = 0; i < 3; i++)
-		threads[i] = std::thread(aricanli::general::log_test, i);
+	aricanli::general::Logger::instance().create_open_file(sFilePath);
+	aricanli::general::Logger::instance().create_open_file(res);
+	{
+		Timer timer;
+		std::thread threads[3];
+		for (int i = 0; i < 3; i++)
+			threads[i] = std::thread(aricanli::general::log_test, i);
 
-	for (int i = 0; i < 3; i++)
-		threads[i].join();
-	aricanli::general::Logger::instance().close_file();
-	timer.Stop();
+		for (int i = 0; i < 3; i++)
+			threads[i].join();
+	}
 	CStdioFile fp;
 	CString m_Buffer;
 	CString m_TempBuffer;
@@ -165,10 +171,9 @@ void CLoggerTestAppDlg::OnBnClickedButton1()
 
 	fp.Close();
 	
-	long long duration = timer.end - timer.begin;
-	double ms = duration * 0.001;
+	
 	std::ostringstream ost;
-	ost << std::setprecision(8) << ms;
+	ost << std::setprecision(8) << Timer::result;
 	m_Buffer += ost.str().c_str();
 	m_Buffer += " ms \r\n";
 	m_EditList.SetWindowText(m_Buffer);

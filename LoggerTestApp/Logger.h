@@ -25,8 +25,9 @@ namespace aricanli {
 		private:
 			Severity severity = Severity::Quiet;
 			std::mutex log_mutex;
+			std::mutex log_mutex2;
 			std::string file_path = "";
-			std::fstream file;
+			std::wstring wfile_path = L"";
 
 		protected:
 			// template function converts arguments(wchar_t) to std::wstring type
@@ -56,14 +57,32 @@ namespace aricanli {
 			******************************************************************************************/
 			template <typename T>
 			void log_writefile(const T& value) {
-				file.close();
-				file.open(file_path, std::fstream::in | std::fstream::out | std::fstream::app);
+				typename std::lock_guard lock2(log_mutex2);
+				std::ofstream file(file_path, std::ios_base::app);
 				if (typeid(value) == typeid(wchar_t const* __ptr64)) {
 					std::wstring temp = wstringer(value);
 					std::string res(temp.begin(), temp.end());
 					file << res.c_str() << " ";
 					return;
 				}
+				file << value << " ";
+			}
+			
+			//for wchar_t expansion no need to convert to std::string 
+			//std::wofstream is used to write file wchar_t type variables
+			template <typename T>
+			void wlog_writefile(const T& value) {
+				std::wofstream file(wfile_path, std::ios_base::app);
+				typename std::lock_guard lock2(log_mutex2);
+				std::wstring temp = wstringer(value);
+				file << temp.c_str() << " ";
+			}
+
+			//for std::string type args to write file
+			template <typename T>
+			void slog_writefile(const T& value) {
+				typename std::lock_guard lock2(log_mutex2);
+				std::ofstream file(file_path, std::ios_base::app);
 				file << value << " ";
 			}
 
@@ -83,10 +102,26 @@ namespace aricanli {
 			* Output : Log text file which includes all logs in chosen path from GUI
 			***********************************************************************************************/
 			template<typename T, typename... Args>
-			static void Any(int line, const std::string source_file, const std::string& msg_priorty_str,
-				Severity msg_severity, const T message, Args... args)
+			static void Any(int line, const std::string& source_file, const std::string& msg_priorty_str,
+				const Severity& msg_severity, const T& message, Args... args)
 			{
 				instance().log(line, source_file, msg_priorty_str, msg_severity, message, args...);
+			}
+
+			//template is used just for wchar_t type expansion operations
+			template<typename... Args>
+			static void AnyW(int line, const std::wstring& source_file, const std::wstring& msg_priorty_str,
+				const Severity& msg_severity, const std::wstring& message, Args... args)
+			{
+				instance().wlog(line, source_file, msg_priorty_str, msg_severity, message, args...);
+			}
+
+			//template is used just for std::string type expansion operations
+			template<typename... Args>
+			static void AnyS(int line, const std::string& source_file, const std::string& msg_priorty_str,
+				const Severity& msg_severity, const std::string& message, Args... args)
+			{
+				instance().slog(line, source_file, msg_priorty_str, msg_severity, message, args...);
 			}
 
 		public:
@@ -95,12 +130,10 @@ namespace aricanli {
 			Logger(const Logger&) = delete;
 			Logger& operator= (const Logger&) = delete;
 
-			~Logger()
-			{
-				if (file.is_open())
-					file.close();
-			}
+			~Logger() {}
 
+			//define instance to make class singleton type because template functions are static 
+			//so not needed to create class type variables in order to use these functions 
 			static Logger& instance()
 			{
 				static Logger logger;
@@ -116,25 +149,18 @@ namespace aricanli {
 			* Output : Log text file which includes all logs in chosen path from GUI 
 			*********************************************************************************************/
 			template<typename T, typename... Args>
-			void log(int line, const std::string& source, const std::string& msg_priorty_str,
-				Severity msg_severity, const T& msg, Args... args)
+			void log(int line, std::string source, const std::string& msg_priorty_str,
+				const Severity& msg_severity, T msg, Args... args)
 			{
 				if (severity <= msg_severity)	//check severity
 				{
-					//Date operation take current time : Day, Month, Hour:Minute:Sec, Year
-					time_t current_time = time(0);
-					tm* timestamp = localtime(&current_time);
-					char buffer[80];
-					//convert time to char array then char array to std::string
-					strftime(buffer, 80, "%c", timestamp);
-					std::string s(buffer);
 					//define std::lock_guard to support multithreading
 					typename std::lock_guard lock(log_mutex);
 					std::string m_msg;
+					std::ofstream file(file_path, std::ios_base::app);
 					if (file.is_open())
 					{
 						file.close();
-						file.open(file_path, std::fstream::in | std::fstream::out | std::fstream::app);
 						//check type wchar or char convert std::string to write file
 						if (typeid(msg) == typeid(wchar_t const* __ptr64)) {	
 							std::wstring tmp = wstringer(msg);
@@ -145,35 +171,135 @@ namespace aricanli {
 							std::string resT = stringer(msg);
 							m_msg = resT;
 						}
+						//Date operation take current time : Day, Month, Hour:Minute:Sec, Year
+						time_t current_time = time(0);
+						tm* timestamp = localtime(&current_time);
+						char buffer[80];
+						//convert time to char array then char array to std::string
+						strftime(buffer, 80, "%c", timestamp);
+						std::string s(buffer);
 						//write file given inputs in a proper format for logging
 						//(time, severity, message, args, line and source file path)
-						file << s.c_str() << '\t' << msg_priorty_str.c_str() << " " << m_msg.c_str() << " ";
+						{
+							typename std::lock_guard lock2(log_mutex2);
+							std::ofstream file(file_path, std::ios_base::app);
+							file << s.c_str() << '\t' << msg_priorty_str.c_str() << " " << m_msg.c_str() << " "; 
+						}
 						//write all type args to file
 						int dummy[] = { 0, ((void)log_writefile(std::forward<Args>(args)),0)... };
+						typename std::lock_guard lock2(log_mutex2);
+						std::ofstream file(file_path, std::ios_base::app);
 						file << " on line " << line << " in " << source.c_str() << "\n";
+					//	delete timestamp;
 					}
 					else
 						AfxMessageBox(_T("Logger: Failed to open file "));
 				}
 			}
 
-			//close file if open if don't close, don't write file
-			void close_file()
+			//same as log function difference is that below function just for wchar_t types
+			template<typename... Args>
+			void wlog(int line, const std::wstring& source, std::wstring msg_priorty_str,
+				const Severity& msg_severity, const std::wstring& msg, Args... args)
 			{
-				if (file.is_open())
-					file.close();
+				if (severity <= msg_severity)	//check severity
+				{					
+					//Date operation take current time : Day, Month, Hour:Minute:Sec, Year
+					time_t rawtime;
+					struct tm* timeinfo;
+					wchar_t buffer[80];
+
+					//define thread to support multithreading and locks it to prevent to 
+					//writing different code parts to file
+					typename std::lock_guard lock(log_mutex);
+					time(&rawtime);
+					timeinfo = localtime(&rawtime);
+
+					//take time in wchar_t type
+					wcsftime(buffer, 80, L"%c", timeinfo);
+					std::wstring wtime = wstringer(buffer);
+
+					//write file given inputs in a proper format for logging
+					//(time, severity, message, args, line and source file path)
+					{
+						//define std::lock_guard to support multithreading
+						typename std::lock_guard lock2(log_mutex2);
+						std::wofstream file(wfile_path, std::ios_base::app);
+						file << wtime.c_str() << L'\t' << msg_priorty_str.c_str() << L" " << msg.c_str() << L" ";
+					}
+
+					//write args to file
+					int dummy[] = { 0, ((void)wlog_writefile(std::forward<Args>(args)),0)... };
+
+					//open file and write given inputs to file
+					std::wofstream file(wfile_path, std::ios_base::app);
+					file << L" on line " << line << L" in " << source.c_str() << L"\n";
+				}
+				else
+					AfxMessageBox(_T("Logger: Failed to open file "));
+			}
+
+			//same as log function difference is that below function just support std::string types
+			template<typename... Args>
+			void slog(int line, const std::string& source, const std::string& msg_priorty_str,
+				const Severity& msg_severity, const std::string& msg, Args... args)
+			{
+				if (severity <= msg_severity)	//check severity
+				{
+					//define std::lock_guard to support multithreading
+					typename std::lock_guard lock(log_mutex);
+					std::ofstream file(file_path, std::ios_base::app);
+					if (file.is_open())
+					{
+						file.close();
+						std::string m_msg;
+						//convert char to std::string to write file
+						std::string resT = stringer(msg);
+						m_msg = resT;
+						
+						//Date operation take current time : Day, Month, Hour:Minute:Sec, Year
+						time_t current_time = time(0);
+						tm* timestamp = localtime(&current_time);
+						char buffer[80];
+						//convert time to char array then char array to std::string
+						strftime(buffer, 80, "%c", timestamp);
+						std::string s(buffer);
+
+						//write file given inputs in a proper format for logging
+						//(time, severity, message, args, line and source file path)
+						{
+							typename std::lock_guard lock2(log_mutex2);
+							std::ofstream file(file_path, std::ios_base::app);
+							file << s.c_str() << '\t' << msg_priorty_str.c_str() << " " << m_msg.c_str() << " ";
+						}
+						//write all type args to file
+						int dummy[] = { 0, ((void)slog_writefile(std::forward<Args>(args)),0)... };
+						typename std::lock_guard lock2(log_mutex2);
+						std::ofstream file(file_path, std::ios_base::app);
+						file << " on line " << line << " in " << source.c_str() << "\n";
+					//	delete timestamp;
+					}
+					else
+						AfxMessageBox(_T("Logger: Failed to open file "));
+				}
 			}
 
 			//create or open file in a give path
-			void enable_file_output(const std::string& new_file_path)
+			void create_open_file(const std::string& new_file_path)
 			{
-				file.close();
 				file_path = new_file_path;
-				file.open(file_path, std::fstream::in | std::fstream::out | std::fstream::app);
-				if (!file.is_open()) {
-					AfxMessageBox(_T("File creation failed."));
-					return;
+				std::ofstream file(file_path, std::ios_base::app);
+				if (!file.is_open())
+				{
+					AfxMessageBox(_T("Logger: Failed to open file "));
 				}
+			}
+
+			//create or open file in a give path wstring type path and file
+			void create_open_file(const std::wstring& new_file_path)
+			{
+				wfile_path = new_file_path;
+				std::wofstream file(file_path, std::ios_base::app);
 			}
 		};
 
@@ -190,16 +316,40 @@ namespace aricanli {
 		#define LOG_DEBUG(msg, ...) (Logger::Any(__LINE__, __FILE__,"[Debug]\t", Severity::Debug, msg, __VA_ARGS__))
 		#define LOG_VERB(msg, ...) (Logger::Any(__LINE__, __FILE__,"[Verbose]\t", Severity::Verb, msg, __VA_ARGS__))
 		#define LOG_TRACE(msg, ...) (Logger::Any(__LINE__, __FILE__,"[Trace]\t", Severity::Trace, msg, __VA_ARGS__))
+		
+		//in order to use L instead of _T() macro
+		#define WIDE2(x) L##x
+		#define WIDE1(x) WIDE2(x)
+		#define WFILE WIDE1(__FILE__)
 
+		//Macros are defined just for wchar_t expansion
+		#define WLOG_QUIET(msg, ...) (Logger::AnyW(__LINE__, WFILE, L"[Quiet]\t",Severity::Quiet,msg,__VA_ARGS__))
+		#define WLOG_FATAL(msg, ...) (Logger::AnyW(__LINE__, WFILE, L"[Fatal]\t",Severity::Fatal,msg,__VA_ARGS__))
+		#define WLOG_ERROR(msg, ...) (Logger::AnyW(__LINE__, WFILE, L"[Error]\t",Severity::Error,msg,__VA_ARGS__))
+		#define WLOG_INFO(msg, ...) (Logger::AnyW(__LINE__, WFILE, L"[Info]\t",Severity::Info,msg,__VA_ARGS__))
+		#define WLOG_WARN(msg, ...) (Logger::AnyW(__LINE__, WFILE, L"[Warn]\t",Severity::Warn,msg,__VA_ARGS__))
+		#define WLOG_DEBUG(msg, ...) (Logger::AnyW(__LINE__, WFILE, L"[Debug]\t",Severity::Debug,msg,__VA_ARGS__))
+		#define WLOG_VERB(msg, ...) (Logger::AnyW(__LINE__, WFILE, L"[Verbose]\t",Severity::Verb,msg,__VA_ARGS__))
+		#define WLOG_TRACE(msg, ...) (Logger::AnyW(__LINE__, WFILE, L"[Trace]\t",Severity::Trace,msg,__VA_ARGS__))
+
+		//Macros are defined just for char_t expansion
+		#define SLOG_QUIET(msg, ...) (Logger::AnyS(__LINE__,__FILE__,"[Quiet]\t",Severity::Quiet,msg,__VA_ARGS__))
+		#define SLOG_FATAL(msg, ...) (Logger::AnyS(__LINE__,__FILE__,"[Fatal]\t",Severity::Fatal,msg,__VA_ARGS__))
+		#define SLOG_ERROR(msg, ...) (Logger::AnyS(__LINE__,__FILE__,"[Error]\t",Severity::Error,msg,__VA_ARGS__))
+		#define SLOG_INFO(msg, ...) (Logger::AnyS(__LINE__,__FILE__,"[Info]\t", Severity::Info, msg, __VA_ARGS__))
+		#define SLOG_WARN(msg, ...) (Logger::AnyS(__LINE__,__FILE__,"[Warn]\t", Severity::Warn, msg, __VA_ARGS__))
+		#define SLOG_DEBUG(msg, ...) (Logger::AnyS(__LINE__,__FILE__,"[Debug]\t", Severity::Debug, msg, __VA_ARGS__))
+		#define SLOG_VERB(msg, ...) (Logger::AnyS(__LINE__,__FILE__,"[Verbose]\t", Severity::Verb, msg, __VA_ARGS__))
+		#define SLOG_TRACE(msg, ...) (Logger::AnyS(__LINE__,__FILE__,"[Trace]\t", Severity::Trace, msg, __VA_ARGS__))
 		//Test function to test whether Logger class run properly
 		//input n: specify thread number
 		void log_test(int n) {
-			LOG_DEBUG(_T("fatih"), n, _T("Write Args"), 3434);
-			LOG_WARN(_T("warning %d"), n, "sdsdsd", _T("fatih"), 7853);
-			LOG_ERROR("error %d", n, "Args Errrrrrrorrrrr");
-			LOG_FATAL("fatal error %d", n);
-			LOG_TRACE("Trace : %d", n);
-			LOG_QUIET("QUIET %d", n);
+			WLOG_DEBUG(L"fatih", n, L"Write Args", 3434);
+			WLOG_WARN(L"warning %d", n, 7853);
+			SLOG_ERROR("error %d", n);
+			WLOG_FATAL(L"fatal error %d",L"fdds", n);
+			WLOG_TRACE(L"Trace : %d", n);
+			WLOG_QUIET(L"QUIET %d", n);
 		}
 	}
 }
