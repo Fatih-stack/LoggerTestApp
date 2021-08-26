@@ -20,6 +20,58 @@ namespace aricanli {
 			Quiet = 0, Fatal = 8, Error = 16, Warn = 24, Info = 32, Verb = 40, Debug = 48, Trace = 56
 		};
 
+		//structs are defined for operator overloadings
+
+		struct loggerFile
+		{
+			loggerFile(std::wstring t, std::wstring m, std::wstring m_p) 
+				: w_time(t), w_msg_priority(m_p), w_msg(m) {}
+			loggerFile(std::string t, std::string m, std::string m_p) : time(t), msg_priority(m_p), msg(m) {}
+			friend std::wofstream& operator << (std::wofstream& wfile, const loggerFile& lF);
+			friend std::ofstream& operator << (std::ofstream& file, const loggerFile& lF);
+		private:
+			std::wstring w_msg, w_msg_priority, w_time;
+			std::string msg, msg_priority, time;
+		};
+
+		struct loggerFileLast
+		{
+			loggerFileLast(int line, std::wstring source) : line(line), w_source(source) {}
+			loggerFileLast(int line, std::string source) : line(line), source(source) {}
+			friend std::wofstream& operator << (std::wofstream& wfile, const loggerFileLast& lF);
+			friend std::ofstream& operator << (std::ofstream& wfile, const loggerFileLast& lF);
+		private:
+			int line;
+			std::wstring w_source;
+			std::string source;
+		};
+
+		//operator functions are defined as below depends only struct and data type
+
+		std::wofstream& operator << (std::wofstream& wfile, const loggerFile& lF)
+		{
+			wfile << lF.w_time.c_str() << L'\t' << lF.w_msg_priority.c_str() << L" " << lF.w_msg.c_str() << L" ";
+			return wfile;
+		}
+
+		std::wofstream& operator << (std::wofstream& wfile, const loggerFileLast& lF)
+		{
+			wfile << L" on line " << lF.line << L" in " << lF.w_source.c_str() << L"\n";
+			return wfile;
+		}
+
+		std::ofstream& operator << (std::ofstream& file, const loggerFile& lF)
+		{
+			file << lF.time.c_str() << '\t' << lF.msg_priority.c_str() << " " << lF.msg.c_str() << " ";
+			return file;
+		}
+
+		std::ofstream& operator << (std::ofstream& file, const loggerFileLast& lF)
+		{
+			file << " on line " << lF.line << " in " << lF.source.c_str() << "\n";
+			return file;
+		}
+
 		class Logger
 		{
 		private:
@@ -157,43 +209,36 @@ namespace aricanli {
 					//define std::lock_guard to support multithreading
 					typename std::lock_guard lock(log_mutex);
 					std::string m_msg;
-					std::ofstream file(file_path, std::ios_base::app);
-					if (file.is_open())
+					
+					//check type wchar or char convert std::string to write file
+					if (typeid(msg) == typeid(wchar_t const* __ptr64)) {	
+						std::wstring tmp = wstringer(msg);
+						std::string resT(tmp.begin(), tmp.end());
+						m_msg = resT;
+					}
+					else {
+						std::string resT = stringer(msg);
+						m_msg = resT;
+					}
+					//Date operation take current time : Day, Month, Hour:Minute:Sec, Year
+					time_t current_time = time(0);
+					tm* timestamp = localtime(&current_time);
+					char buffer[80];
+					//convert time to char array then char array to std::string
+					strftime(buffer, 80, "%c", timestamp);
+					std::string s(buffer);
+					//write file given inputs in a proper format for logging
+					//(time, severity, message, args, line and source file path)
 					{
-						file.close();
-						//check type wchar or char convert std::string to write file
-						if (typeid(msg) == typeid(wchar_t const* __ptr64)) {	
-							std::wstring tmp = wstringer(msg);
-							std::string resT(tmp.begin(), tmp.end());
-							m_msg = resT;
-						}
-						else {
-							std::string resT = stringer(msg);
-							m_msg = resT;
-						}
-						//Date operation take current time : Day, Month, Hour:Minute:Sec, Year
-						time_t current_time = time(0);
-						tm* timestamp = localtime(&current_time);
-						char buffer[80];
-						//convert time to char array then char array to std::string
-						strftime(buffer, 80, "%c", timestamp);
-						std::string s(buffer);
-						//write file given inputs in a proper format for logging
-						//(time, severity, message, args, line and source file path)
-						{
-							typename std::lock_guard lock2(log_mutex2);
-							std::ofstream file(file_path, std::ios_base::app);
-							file << s.c_str() << '\t' << msg_priorty_str.c_str() << " " << m_msg.c_str() << " "; 
-						}
-						//write all type args to file
-						int dummy[] = { 0, ((void)log_writefile(std::forward<Args>(args)),0)... };
 						typename std::lock_guard lock2(log_mutex2);
 						std::ofstream file(file_path, std::ios_base::app);
-						file << " on line " << line << " in " << source.c_str() << "\n";
-					//	delete timestamp;
+						file << s.c_str() << '\t' << m_msg.c_str() << " " << msg_priorty_str.c_str() << " ";
 					}
-					else
-						AfxMessageBox(_T("Logger: Failed to open file "));
+					//write all type args to file
+					int dummy[] = { 0, ((void)log_writefile(std::forward<Args>(args)),0)... };
+					typename std::lock_guard lock2(log_mutex2);
+					std::ofstream file(file_path, std::ios_base::app);
+					file << " on line " << line << " in " << source.c_str() << "\n";					
 				}
 			}
 
@@ -225,7 +270,8 @@ namespace aricanli {
 						//define std::lock_guard to support multithreading
 						typename std::lock_guard lock2(log_mutex2);
 						std::wofstream file(wfile_path, std::ios_base::app);
-						file << wtime.c_str() << L'\t' << msg_priorty_str.c_str() << L" " << msg.c_str() << L" ";
+						loggerFile lF(wtime, msg_priorty_str, msg);
+						file << lF;
 					}
 
 					//write args to file
@@ -233,10 +279,9 @@ namespace aricanli {
 
 					//open file and write given inputs to file
 					std::wofstream file(wfile_path, std::ios_base::app);
-					file << L" on line " << line << L" in " << source.c_str() << L"\n";
+					loggerFileLast lF(line, source);
+					file << lF;
 				}
-				else
-					AfxMessageBox(_T("Logger: Failed to open file "));
 			}
 
 			//same as log function difference is that below function just support std::string types
@@ -248,39 +293,32 @@ namespace aricanli {
 				{
 					//define std::lock_guard to support multithreading
 					typename std::lock_guard lock(log_mutex);
-					std::ofstream file(file_path, std::ios_base::app);
-					if (file.is_open())
-					{
-						file.close();
-						std::string m_msg;
-						//convert char to std::string to write file
-						std::string resT = stringer(msg);
-						m_msg = resT;
-						
-						//Date operation take current time : Day, Month, Hour:Minute:Sec, Year
-						time_t current_time = time(0);
-						tm* timestamp = localtime(&current_time);
-						char buffer[80];
-						//convert time to char array then char array to std::string
-						strftime(buffer, 80, "%c", timestamp);
-						std::string s(buffer);
+					
+					//Date operation take current time : Day, Month, Hour:Minute:Sec, Year
+					time_t current_time = time(0);
+					tm* timestamp = localtime(&current_time);
+					char buffer[80];
+					//convert time to char array then char array to std::string
+					strftime(buffer, 80, "%c", timestamp);
+					std::string time(buffer);
 
-						//write file given inputs in a proper format for logging
-						//(time, severity, message, args, line and source file path)
-						{
-							typename std::lock_guard lock2(log_mutex2);
-							std::ofstream file(file_path, std::ios_base::app);
-							file << s.c_str() << '\t' << msg_priorty_str.c_str() << " " << m_msg.c_str() << " ";
-						}
-						//write all type args to file
-						int dummy[] = { 0, ((void)slog_writefile(std::forward<Args>(args)),0)... };
+					//write file given inputs in a proper format for logging 
+					//(time, severity, message, args, line and source file path)
+					//by locking with lock_guard to prevent write other things
+					{
 						typename std::lock_guard lock2(log_mutex2);
 						std::ofstream file(file_path, std::ios_base::app);
-						file << " on line " << line << " in " << source.c_str() << "\n";
-					//	delete timestamp;
+						loggerFile lF(time, msg_priorty_str, msg);
+						file << lF;
 					}
-					else
-						AfxMessageBox(_T("Logger: Failed to open file "));
+					//write all type args to file
+					int dummy[] = { 0, ((void)slog_writefile(std::forward<Args>(args)),0)... };
+
+					//write last part of log row by locking with lock_guard to prevent write other things
+					typename std::lock_guard lock2(log_mutex2);
+					std::ofstream file(file_path, std::ios_base::app);
+					loggerFileLast lF(line, source);
+					file << lF;
 				}
 			}
 
@@ -344,11 +382,11 @@ namespace aricanli {
 		//Test function to test whether Logger class run properly
 		//input n: specify thread number
 		void log_test(int n) {
-			WLOG_DEBUG(L"fatih", n, L"Write Args", 3434);
-			WLOG_WARN(L"warning %d", n, 7853);
-			SLOG_ERROR("error %d", n);
-			WLOG_FATAL(L"fatal error %d",L"fdds", n);
-			WLOG_TRACE(L"Trace : %d", n);
+			WLOG_DEBUG(L"fatih %d", n, L"Write Args", 3434);
+			WLOG_WARN(L"warn %d", n, L"Warningggggg");
+			SLOG_ERROR("error %d", n, "Error writing");
+			LOG_FATAL(L"fatal %d", n, "Fatal reading");
+			WLOG_TRACE(L"Trace %d", n, L"trace writing");
 			WLOG_QUIET(L"QUIET %d", n);
 		}
 	}
