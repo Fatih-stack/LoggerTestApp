@@ -379,15 +379,16 @@ namespace aricanli {
 		#define SLOG_DEBUG(msg, ...) (Logger::AnyS(__LINE__,__FILE__,"[Debug]\t", Severity::Debug, msg, __VA_ARGS__))
 		#define SLOG_VERB(msg, ...) (Logger::AnyS(__LINE__,__FILE__,"[Verbose]\t", Severity::Verb, msg, __VA_ARGS__))
 		#define SLOG_TRACE(msg, ...) (Logger::AnyS(__LINE__,__FILE__,"[Trace]\t", Severity::Trace, msg, __VA_ARGS__))
+	
 		//Test function to test whether Logger class run properly
 		//input n: specify thread number
 		void log_test(int n) {
-			WLOG_DEBUG(L"fatih %d", n, L"Write Args", 3434);
-			WLOG_WARN(L"warn %d", n, L"Warningggggg");
-			SLOG_ERROR("error %d", n, "Error writing");
-			LOG_FATAL(L"fatal %d", n, "Fatal reading");
-			WLOG_TRACE(L"Trace %d", n, L"trace writing");
-			WLOG_QUIET(L"QUIET %d", n);
+			WLOG_DEBUG(L"fatih %d", n, L"different args");
+			SLOG_WARN("warn %d", n, "Warningggggg", 34);
+			LOG_ERROR("error %d", n, L"Error writing", 43, "fatih");
+			LOG_FATAL(L"fatal %d", n, "Fatal Error in writing");
+			WLOG_TRACE(L"Trace %d", n, L"trace reading", 2345);
+			SLOG_QUIET("QUIET %d", n);
 		}
 	}
 }
