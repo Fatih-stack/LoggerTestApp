@@ -24,9 +24,10 @@ namespace aricanli {
 
 		struct loggerFile
 		{
-			loggerFile(std::wstring t, std::wstring m, std::wstring m_p) 
+			loggerFile(const std::wstring& t, const std::wstring& m, const std::wstring& m_p) 
 				: w_time(t), w_msg_priority(m_p), w_msg(m) {}
-			loggerFile(std::string t, std::string m, std::string m_p) : time(t), msg_priority(m_p), msg(m) {}
+			loggerFile(const std::string& t, const std::string& m, const std::string& m_p) 
+				: time(t), msg_priority(m_p), msg(m) {}
 			friend std::wofstream& operator << (std::wofstream& wfile, const loggerFile& lF);
 			friend std::ofstream& operator << (std::ofstream& file, const loggerFile& lF);
 		private:
@@ -36,14 +37,15 @@ namespace aricanli {
 
 		struct loggerFileLast
 		{
-			loggerFileLast(int line, std::wstring source) : line(line), w_source(source) {}
-			loggerFileLast(int line, std::string source) : line(line), source(source) {}
-			friend std::wofstream& operator << (std::wofstream& wfile, const loggerFileLast& lF);
-			friend std::ofstream& operator << (std::ofstream& wfile, const loggerFileLast& lF);
 		private:
 			int line;
 			std::wstring w_source;
 			std::string source;
+		public:
+			loggerFileLast(const int& line, const std::wstring& source) : line(line), w_source(source) {}
+			loggerFileLast(const int& line, const std::string& source) : line(line), source(source) {}
+			friend std::wofstream& operator << (std::wofstream& wfile, const loggerFileLast& lF);
+			friend std::ofstream& operator << (std::ofstream& wfile, const loggerFileLast& lF);
 		};
 
 		//operator functions are defined as below depends only struct and data type
@@ -80,12 +82,14 @@ namespace aricanli {
 			std::mutex log_mutex2;
 			std::string file_path = "";
 			std::wstring wfile_path = L"";
+			std::ofstream file;
+			std::wofstream wfile;
 
 		protected:
 			// template function converts arguments(wchar_t) to std::wstring type
 			//input any type args but can't take char type because wostringstream for wchar_t
 			template<typename ... Args>
-			std::wstring wstringer(const Args& ... args)
+			std::wstring wstringer(Args && ... args)
 			{
 				std::wostringstream oss;
 				int a[] = { 0, ((void)(oss << args), 0) ... };
@@ -95,7 +99,7 @@ namespace aricanli {
 			// template function converts arguments(char_t, other args) to std::string type
 			//input any type args but can't take wchar_t type because ostringstream for char_t
 			template<typename ... Args>
-			std::string stringer(const Args& ... args)
+			std::string stringer(Args && ... args)
 			{
 				std::ostringstream oss;
 				int a[] = { 0, ((void)(oss << args), 0) ... };
@@ -108,9 +112,8 @@ namespace aricanli {
 			* Output : writes given input to file
 			******************************************************************************************/
 			template <typename T>
-			void log_writefile(const T& value) {
-				typename std::lock_guard lock2(log_mutex2);
-				std::ofstream file(file_path, std::ios_base::app);
+			void log_writefile(T && value) {
+				std::lock_guard lock2(log_mutex2);
 				if (typeid(value) == typeid(wchar_t const* __ptr64)) {
 					std::wstring temp = wstringer(value);
 					std::string res(temp.begin(), temp.end());
@@ -123,18 +126,16 @@ namespace aricanli {
 			//for wchar_t expansion no need to convert to std::string 
 			//std::wofstream is used to write file wchar_t type variables
 			template <typename T>
-			void wlog_writefile(const T& value) {
-				std::wofstream file(wfile_path, std::ios_base::app);
-				typename std::lock_guard lock2(log_mutex2);
+			void wlog_writefile(T && value) {
+				std::lock_guard lock2(log_mutex2);
 				std::wstring temp = wstringer(value);
-				file << temp.c_str() << " ";
+				wfile << temp.c_str() << " ";
 			}
 
 			//for std::string type args to write file
 			template <typename T>
-			void slog_writefile(const T& value) {
-				typename std::lock_guard lock2(log_mutex2);
-				std::ofstream file(file_path, std::ios_base::app);
+			void slog_writefile(T && value) {
+				std::lock_guard lock2(log_mutex2);
 				file << value << " ";
 			}
 
@@ -163,7 +164,7 @@ namespace aricanli {
 			//template is used just for wchar_t type expansion operations
 			template<typename... Args>
 			static void AnyW(int line, const std::wstring& source_file, const std::wstring& msg_priorty_str,
-				const Severity& msg_severity, const std::wstring& message, Args... args)
+				const Severity& msg_severity, const std::wstring& message, Args && ... args)
 			{
 				instance().wlog(line, source_file, msg_priorty_str, msg_severity, message, args...);
 			}
@@ -182,7 +183,11 @@ namespace aricanli {
 			Logger(const Logger&) = delete;
 			Logger& operator= (const Logger&) = delete;
 
-			~Logger() {}
+			~Logger() 
+			{ 
+				file.close();
+				wfile.close();
+			}
 
 			//define instance to make class singleton type because template functions are static 
 			//so not needed to create class type variables in order to use these functions 
@@ -204,10 +209,10 @@ namespace aricanli {
 			void log(int line, std::string source, const std::string& msg_priorty_str,
 				const Severity& msg_severity, T msg, Args... args)
 			{
-				if (severity <= msg_severity)	//check severity
+				if (severity >= msg_severity)	//check severity
 				{
 					//define std::lock_guard to support multithreading
-					typename std::lock_guard lock(log_mutex);
+					std::lock_guard lock(log_mutex);
 					std::string m_msg;
 					
 					//check type wchar or char convert std::string to write file
@@ -222,7 +227,7 @@ namespace aricanli {
 					}
 					//Date operation take current time : Day, Month, Hour:Minute:Sec, Year
 					time_t current_time = time(0);
-					tm* timestamp = localtime(&current_time);
+					auto timestamp = std::make_shared<tm>(localtime(&current_time));
 					char buffer[80];
 					//convert time to char array then char array to std::string
 					strftime(buffer, 80, "%c", timestamp);
@@ -230,36 +235,32 @@ namespace aricanli {
 					//write file given inputs in a proper format for logging
 					//(time, severity, message, args, line and source file path)
 					{
-						typename std::lock_guard lock2(log_mutex2);
-						std::ofstream file(file_path, std::ios_base::app);
+						std::lock_guard lock2(log_mutex2);
 						file << s.c_str() << '\t' << m_msg.c_str() << " " << msg_priorty_str.c_str() << " ";
 					}
 					//write all type args to file
 					int dummy[] = { 0, ((void)log_writefile(std::forward<Args>(args)),0)... };
-					typename std::lock_guard lock2(log_mutex2);
-					std::ofstream file(file_path, std::ios_base::app);
+					std::lock_guard lock2(log_mutex2);
 					file << " on line " << line << " in " << source.c_str() << "\n";					
 				}
 			}
 
 			//same as log function difference is that below function just for wchar_t types
 			template<typename... Args>
-			void wlog(int line, const std::wstring& source, std::wstring msg_priorty_str,
-				const Severity& msg_severity, const std::wstring& msg, Args... args)
+			void wlog(const int& line, const std::wstring& source, const std::wstring& msg_priorty_str,
+				const Severity& msg_severity, const std::wstring& msg, Args && ... args)
 			{
-				if (severity <= msg_severity)	//check severity
+				if (severity >= msg_severity)	//check severity
 				{					
 					//Date operation take current time : Day, Month, Hour:Minute:Sec, Year
 					time_t rawtime;
-					struct tm* timeinfo;
 					wchar_t buffer[80];
 
 					//define thread to support multithreading and locks it to prevent to 
 					//writing different code parts to file
 					typename std::lock_guard lock(log_mutex);
 					time(&rawtime);
-					timeinfo = localtime(&rawtime);
-
+					tm* timeinfo = localtime(&rawtime);
 					//take time in wchar_t type
 					wcsftime(buffer, 80, L"%c", timeinfo);
 					std::wstring wtime = wstringer(buffer);
@@ -268,19 +269,17 @@ namespace aricanli {
 					//(time, severity, message, args, line and source file path)
 					{
 						//define std::lock_guard to support multithreading
-						typename std::lock_guard lock2(log_mutex2);
-						std::wofstream file(wfile_path, std::ios_base::app);
+						std::lock_guard lock2(log_mutex2);
 						loggerFile lF(wtime, msg_priorty_str, msg);
-						file << lF;
+						wfile << lF;
 					}
 
 					//write args to file
 					int dummy[] = { 0, ((void)wlog_writefile(std::forward<Args>(args)),0)... };
 
 					//open file and write given inputs to file
-					std::wofstream file(wfile_path, std::ios_base::app);
 					loggerFileLast lF(line, source);
-					file << lF;
+					wfile << lF;
 				}
 			}
 
@@ -307,7 +306,6 @@ namespace aricanli {
 					//by locking with lock_guard to prevent write other things
 					{
 						typename std::lock_guard lock2(log_mutex2);
-						std::ofstream file(file_path, std::ios_base::app);
 						loggerFile lF(time, msg_priorty_str, msg);
 						file << lF;
 					}
@@ -316,28 +314,24 @@ namespace aricanli {
 
 					//write last part of log row by locking with lock_guard to prevent write other things
 					typename std::lock_guard lock2(log_mutex2);
-					std::ofstream file(file_path, std::ios_base::app);
 					loggerFileLast lF(line, source);
 					file << lF;
 				}
 			}
 
-			//create or open file in a give path
-			void create_open_file(const std::string& new_file_path)
-			{
-				file_path = new_file_path;
-				std::ofstream file(file_path, std::ios_base::app);
-				if (!file.is_open())
-				{
-					AfxMessageBox(_T("Logger: Failed to open file "));
-				}
-			}
 
 			//create or open file in a give path wstring type path and file
 			void create_open_file(const std::wstring& new_file_path)
 			{
 				wfile_path = new_file_path;
-				std::wofstream file(file_path, std::ios_base::app);
+				wfile.open(wfile_path, std::ios_base::app);
+				std::string res(wfile_path.begin(), wfile_path.end());
+				file_path = res;
+				file.open(file_path, std::ios_base::app);
+				if (!file.is_open())
+				{
+					AfxMessageBox(_T("Logger: Failed to open file "));
+				}
 			}
 		};
 
@@ -383,12 +377,7 @@ namespace aricanli {
 		//Test function to test whether Logger class run properly
 		//input n: specify thread number
 		void log_test(int n) {
-			WLOG_DEBUG(L"fatih %d", n, L"different args");
-			SLOG_WARN("warn %d", n, "Warningggggg", 34);
-			LOG_ERROR("error %d", n, L"Error writing", 43, "fatih");
-			LOG_FATAL(L"fatal %d", n, "Fatal Error in writing");
-			WLOG_TRACE(L"Trace %d", n, L"trace reading", 2345);
-			SLOG_QUIET("QUIET %d", n);
+			WLOG_VERB(L"Verb %d", n, L"abcd test");
 		}
 	}
 }

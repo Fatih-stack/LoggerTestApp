@@ -146,16 +146,14 @@ void CLoggerTestAppDlg::OnBnClickedButton1()
 	}
 	std::string res(sFilePath.begin(), sFilePath.end());
 	aricanli::general::Logger::instance().create_open_file(sFilePath);
-	aricanli::general::Logger::instance().create_open_file(res);
 	{
 		Timer timer;
-		std::thread threads[3];
-		for (int i = 0; i < 3; i++)
-			threads[i] = std::thread(aricanli::general::log_test, i);
+		aricanli::general::Logger::instance().SetPriority(aricanli::general::Severity::Trace);
+		for(int i=0; i<100'000;i++)
+			aricanli::general::log_test(i);
 
-		for (int i = 0; i < 3; i++)
-			threads[i].join();
 	}
+	aricanli::general::Logger::instance().~Logger();
 	CStdioFile fp;
 	CString m_Buffer;
 	CString m_TempBuffer;
